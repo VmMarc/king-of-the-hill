@@ -31,7 +31,6 @@ contract KOTH is Ownable {
         require(owner_ != address(0), "KOTH: non-valid address");
         _winBlockNumber = winBlockNumber_;
         _owner = owner_;
-        
         _balances[msg.sender] += msg.value;
         _betTime = block.number;
     }
@@ -40,10 +39,11 @@ contract KOTH is Ownable {
     modifier goodBet() {
         _currentPot = address(this).balance - msg.value;
         require(msg.sender != address(0), "KOTH: Non-valid address.");
-        require(msg.sender == _KOTH, "KOTH: Cannot bet on yourself.");
+        require(msg.sender != _KOTH, "KOTH: Cannot bet on yourself.");
         require(msg.value >= _currentPot * 2, "KOTH: You must at least double the bet.");
         _;
     }
+    
     
     modifier firstBet() {
         require(_KOTH != address(0), "KOTH: No bet yet.");
@@ -51,22 +51,25 @@ contract KOTH is Ownable {
     }
     
     // Functions
+    receive() external payable goodBet {
+        _deposit(msg.sender, msg.value);
+    }
+    
+    fallback() external {}
+    
     function deposit() public payable goodBet {
         _deposit(msg.sender, msg.value);
     }
     
-    receive() external payable goodBet {
-        _deposit(msg.sender, msg.value);
-    }
     
     function _deposit(address sender, uint256 amount) private {
         if (block.number < _betTime + _winBlockNumber) {
             _balances[sender] += amount;
         } else {
-            _paybackAndBet();
             _withdraw();
+            _paybackAndBet();
         }
-        _KOTH = msg.sender; 
+        _KOTH = msg.sender;
         _betTime = block.number;
         emit HadBet(sender, amount, _betTime);
     }
@@ -81,7 +84,7 @@ contract KOTH is Ownable {
     function _paybackAndBet() private {
         uint256 refund = msg.value - (_seed() * 2);
         uint256 newBet = msg.value - refund;
-        _balances[msg.sender] = newBet;
+        _balances[msg.sender] += newBet;
         payable(msg.sender).sendValue(refund);
         emit RefundAndBet(msg.sender, refund, newBet, block.number);
     }
@@ -94,6 +97,17 @@ contract KOTH is Ownable {
         return _currentPot * 10 / 100;
     }
     
+    function blocksBeforeWin() public view returns (uint256) {
+        if (block.number >= _betTime + _winBlockNumber) {
+            return 0;
+        } else {
+            return (_betTime + _winBlockNumber) - block.number;
+        }
+    }
+    
+    function currentBlock() public view returns (uint256) {
+        return block.number;
+    }
     
     function balanceOf(address account) public view returns (uint256) {
         return _balances[account];
